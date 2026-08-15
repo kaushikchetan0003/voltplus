@@ -1,1 +1,63 @@
-{"name":"Build Android APK","on":"push","jobs":{"build":{"runs-on":"ubuntu-latest","steps":[{"name":"Checkout","uses":"actions/checkout@v4"},{"name":"Build APK","uses":"darkshredder/web-to-app-action@main","with":{"build-folder-path":"./","app-name":"VoltPlus","output-folder-path":"my-apks"}},{"name":"Upload APK","uses":"actions/upload-artifact@v4","with":{"name":"VoltPlus-APK","path":"my-apks/"}}]}}}
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Capacitor & Android Toolchain
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Prepare web assets
+        run: |
+          mkdir -p www
+          cp index.html www/ || true
+
+      - name: Initialize Capacitor Config
+        run: |
+          cat <<EOF > capacitor.config.json
+          {
+            "appId": "app.vercel.voltplus",
+            "appName": "VoltPulse",
+            "webDir": "www",
+            "bundledWebRuntime": false
+          }
+          EOF
+
+      - name: Add & Sync Android Platform
+        run: |
+          npx cap add android
+          npx cap sync
+
+      - name: Build APK via Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload VoltPulse APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoltPulse-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
