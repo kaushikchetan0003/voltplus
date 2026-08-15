@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+        <title>VoltPulse Simulator</title>
+      <style>
+                body { background-color: #090d16; color: #f3f4f6; font-family: sans-serif; margin: 0; padding: 24px; }
+                .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+                h1 { color: #2dd4bf; margin: 0; font-size: 28px; letter-spacing: 1px; }
+                .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+                @media(max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+                .card { background-color: #111827; padding: 20px; border-radius: 8px; border: 1px solid #1f2937; }
+                h2 { margin-top: 0; font-size: 18px; margin-bottom: 16px; color: #9ca3af; }
+                .label { display: block; margin-bottom: 8px; font-weight: bold; }
+                input[type="range"] { width: 100%; margin-bottom: 16px; }
+                .flex-col { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                .text-center { text-align: center; }
+                .power-val { font-size: 32px; font-weight: bold; color: #2dd4bf; font-family: monospace; }
+                .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px; }
+                .telemetry-val { font-family: monospace; color: #2dd4bf; font-weight: bold; }
+                .diag-box { padding: 12px; border-radius: 4px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+                .nominal { background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+                .warning { background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+                .critical { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+                .canvas-container { background-color: #030712; border-radius: 6px; padding: 8px; }
+                canvas { width: 100%; height: 120px; display: block; }
+            </style>
+  </head>
+  <body>
+        <div class="container">
+                  <h1>VoltPulse Systems Dashboard</h1>
+                <div class="grid">
+                            <div class="card">
+                                            <h2>Hardware Simulator</h2>
+                                            <span class="label">Voltage: <span id="v-val">220</span>span> V</span>span>
+                                            <input type="range" id="v-sim" min="150" max="300" value="220">
+                                            <span class="label">Load: <span id="l-val">15</span>span> A</span>span>
+                                            <input type="range" id="l-sim" min="0" max="40" value="15">
+                            </div>div>
+                            <div class="card flex-col">
+                                            <svg width="120" height="120" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
+                                                                <circle cx="50" cy="50" r="40" fill="none" stroke="#1f2937" stroke-width="8"/>
+                                                                <circle id="dial-track" cx="50" cy="50" r="40" fill="none" stroke="#2dd4bf" stroke-width="8" stroke-dasharray="251.2" stroke-dashoffset="100" style="transition: stroke-dashoffset 0.2s;"/>
+                                            </svg>svg>
+                                            <div class="text-center" style="margin-top: 12px;">
+                                                                <div class="power-val"><span id="power-val">3.30</span>span> kW</div>div>
+                                                                <div style="color: #9ca3af; font-size: 14px;">Current Power Draw</div>div>
+                                            </div>div>
+                            </div>div>
+                </div>div>
+                <div class="grid">
+                            <div class="card">
+                                            <h2>Telemetry Metrics</h2>
+                                            <div class="telemetry-row"><span>Voltage:</span><span id="m-v" class="telemetry-val">220.0 V</span></div>div>
+                                            <div class="telemetry-row"><span>Current:</span><span id="m-i" class="telemetry-val">15.0 A</span></div>div>
+                                            <div class="telemetry-row"><span>Grid Temp:</span><span id="m-t" class="telemetry-val">42.5 °C</span></div>div>
+                            </div>div>
+                            <div class="card">
+                                            <h2>Smart Bottleneck Engine</h2>
+                                            <div id="diag-status" class="diag-box nominal">ALL SYSTEMS NOMINAL</div>div>
+                                            <p id="diag-msg" style="color: #9ca3af; font-size: 14px; margin: 0;">System parameters within optimal operating range.</p>p>
+                            </div>div>
+                </div>div>
+                <div class="card">
+                            <h2>Real-Time Power Timeline (60s)</h2>
+                            <div class="canvas-container">
+                                            <canvas id="chart"></canvas>canvas>
+                            </div>div>
+                </div>div>
+        </div>div>
+      <script>
+                const vSim = document.getElementById('v-sim');
+                const lSim = document.getElementById('l-sim');
+                const vVal = document.getElementById('v-val');
+                const lVal = document.getElementById('l-val');
+                const mVolt = document.getElementById('m-v');
+                const mCurr = document.getElementById('m-i');
+                const mTemp = document.getElementById('m-t');
+                const powerVal = document.getElementById('power-val');
+                const dialTrack = document.getElementById('dial-track');
+                const diagStatus = document.getElementById('diag-status');
+                const diagMsg = document.getElementById('diag-msg');
+                const canvas = document.getElementById('chart');
+                const ctx = canvas.getContext('2d');
+
+                let powerHistory = Array(60).fill(3.3);
+
+                function update() {
+                              let v = parseFloat(vSim.value);
+                              let l = parseFloat(lSim.value);
+                              vVal.textContent = v;
+                              lVal.textContent = l;
+
+                              v += (Math.random() - 0.5) * 1.5;
+                              l += (Math.random() - 0.5) * 0.2;
+                              l = Math.max(0, l);
+
+                              const power = (v * l) / 1000;
+                              const temp = 25 + (l * l) * 0.05;
+
+                              mVolt.textContent = v.toFixed(1) + ' V';
+                              mCurr.textContent = l.toFixed(1) + ' A';
+                              mTemp.textContent = temp.toFixed(1) + ' °C';
+                              powerVal.textContent = power.toFixed(2);
+
+                              const pct = Math.min(1, power / 12);
+                              dialTrack.style.strokeDashoffset = 251.2 - (pct * 251.2);
+
+                              if (temp > 75) {
+                                                diagStatus.textContent = 'CRITICAL THERMAL THROTTLING';
+                                                diagStatus.className = 'diag-box critical';
+                                                diagMsg.textContent = 'High current causing dangerous system temps. Active cooling required.';
+                              } else if (v < 190) {
+                                                diagStatus.textContent = 'WARNING: UNDER-VOLTAGE BROWNOUT';
+                                                diagStatus.className = 'diag-box warning';
+                                                diagMsg.textContent = 'Voltage below threshold. High switching loss on input converters.';
+                              } else {
+                                                diagStatus.textContent = 'ALL SYSTEMS NOMINAL';
+                                                diagStatus.className = 'diag-box nominal';
+                                                diagMsg.textContent = 'Input voltage and load limits well within safe specifications.';
+                              }
+
+                              powerHistory.push(power);
+                              powerHistory.shift();
+                              draw();
+                }
+
+                function draw() {
+                              const w = canvas.width = canvas.clientWidth;
+                              const h = canvas.height = canvas.clientHeight;
+                              ctx.clearRect(0,0,w,h);
+                              ctx.beginPath();
+                              ctx.lineWidth = 2;
+                              ctx.strokeStyle = '#2dd4bf';
+                              const step = w / 59;
+                              for(let i=0; i<60; i++) {
+                                                const x = i * step;
+                                                const ratio = powerHistory[i] / 12;
+                                                const y = h - (ratio * (h - 10)) - 5;
+                                                if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                              }
+                              ctx.stroke();
+                }
+
+                setInterval(update, 1000);
+                update();
+      </script>
+  </body>
+</html>
+      </script></span></span></h2></h1>
+  </body>
+      </style></title>
+  </head>
+</html>
